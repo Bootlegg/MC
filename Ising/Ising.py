@@ -28,7 +28,7 @@ def TimeCode(f):
 		
 		return result #Den return result fra RunMonteCarlo()
 	
-	#Denne her return en function, ikke et tal etc, men en function, important difference
+	#Denne her return en function, ikke et tal
 	return timed #Den return result fra timed, som return result fra RunMonteCarlo()
 
 def CalcHSlow(S,nx,ny,J):
@@ -292,6 +292,8 @@ def Esiteflip(S,j,i,nx,ny):
 def MCrunParallel(T,Nexperiment,J,nx,ny,PreCalcExp,out_list):
 	"""
 	This can be called with multiprocessing function.
+	This function is called in MainScript() function.
+	
 	But, doing autocorrelation seems to be troublesome...
 	We got 4 arrays that will be copied back and forth, instead of just 4 values...
 	So maybe for autocorrelation, make alternative function/method/do it without multiprocessing
@@ -312,7 +314,10 @@ def MCrunParallel(T,Nexperiment,J,nx,ny,PreCalcExp,out_list):
 
 	else:
 		#If val of index = 0, then we go to -1, if val of index = 2, then we get 1.
-		S = 2*np.random.randint(0,2,(ny,nx))-1
+		#S = 2*np.random.randint(0,2,(ny,nx))-1
+		
+		#Start with uniform case
+		S = np.ones((ny,nx))
 		
 		
 	#print(S)
@@ -354,6 +359,12 @@ def MCrunParallel(T,Nexperiment,J,nx,ny,PreCalcExp,out_list):
 	#EavgMCtemporary = 0
 	#E2avgMCtemporary = 0
 	
+	Msinglestuff = []
+	Esinglestuff = []
+	M2singlestuff = []
+	E2singlestuff = []
+	#XTsinglestuff = []
+	#Cvsinglestuff = []
 	
 	#===============================================
 	#Moving average, using n = 10 points
@@ -529,13 +540,41 @@ def MCrunParallel(T,Nexperiment,J,nx,ny,PreCalcExp,out_list):
 				#Jeg bør lave en moving average, og sammenlinge om Meq er within % af DENNE, er lidt mere cool synes jeg
 				
 				#For equilibrium counts above 10, we calculate average M2, M etc
+				Msinglestuff.append(Meq)
+				M2singlestuff.append(Meq*Meq)
 				MavgMC += Meq
 				M2avgMC += Meq*Meq
 				
 				Ecalc = CalcH(S,nx,ny,J)
+				#Ecalc2 = Ecalc*Ecalc
+				#Meq2 = Meq*Meq
+				
 				EavgMC += Ecalc
 				E2avgMC += Ecalc*Ecalc
 				
+				#Ah wait, I think the Esinglestuff, needs to be divided by something... because it'same
+				#EavgMC = += Ecalc... so.....
+				#Yeah, i think that's why errors bars tend to increase... it's total Energy added etc..
+				#
+				Esinglestuff.append(Ecalc)
+				E2singlestuff.append(Ecalc*Ecalc)
+				
+				#========================
+				# #Calc XT, Cv here? Orrr?
+				# N = nx*ny
+				# #Calculate them for each run, to do, error bars....
+				# #Calculate Isothermal susceptibility
+				# #chi = dm/dh, but we have no h.... but we can use the variance
+				# XT = (1/T)*(M2avgMC-MavgMC**2)/N
+				
+				# #Calculate specific heat
+				# #Kan også prøve at sammenligne med finite differences
+				# #Dette er egentlig Cv pr mass/site
+				# #Hvilke values af Cv får de andre?
+				
+				# #Lad os køre specific heat uden N... det er jo <E**2>-<E>**2, men IKKE PR SPIN.
+				# Cv = (1/T**2)*(E2avgMC-EavgMC**2)/N
+				# #Det kan godt være, at i stedet for np.abs(), skal det være ( )**2
 				
 				#Avgcount used for E and M
 				Avgcount += 1
@@ -565,7 +604,11 @@ def MCrunParallel(T,Nexperiment,J,nx,ny,PreCalcExp,out_list):
 	#EavgMC = EavgMCtemporary/Avgcount
 	
 	
-	TupleMCvals = (MavgMC,M2avgMC,E2avgMC,EavgMC)
+	
+
+	
+	
+	TupleMCvals = (MavgMC,M2avgMC,E2avgMC,EavgMC,Msinglestuff,Esinglestuff,M2singlestuff,E2singlestuff)
 	out_list.put(TupleMCvals)
 	#return MavgMC,M2avgMC,E2avgMC,EavgMC
 	#return TupleMCvals
@@ -583,7 +626,7 @@ def MCrunParallel(T,Nexperiment,J,nx,ny,PreCalcExp,out_list):
 #Ts = []
 
 @TimeCode
-def MainScript(T,Ms,Es,XTs,Cvs,Ts,CEts,CMts):
+def MainScript(T,Ms,Es,XTs,Cvs,Ts,CEts,CMts, MsingleALL,EsingleALL,XTsingleALL,CvsingleALL):
 	"""
 	Maybe calling multiprocessing here would be even more efficient. If possible. For lower overhead. 
 	So calling multiprocessing one step higher.
@@ -592,7 +635,7 @@ def MainScript(T,Ms,Es,XTs,Cvs,Ts,CEts,CMts):
 	"""
 	
 	#The main outer loop changes the temperature, so Nt is the number of different temperatures we examine
-	for nt in range(Nt):
+	for nt in range(N_T):
 
 		
 		
@@ -624,11 +667,11 @@ def MainScript(T,Ms,Es,XTs,Cvs,Ts,CEts,CMts):
 		#mt0mt = 0
 		
 		
-		Marray = np.zeros(tmax)
-		M2array = np.zeros(tmax)
+		#Marray = np.zeros(tmax)
+		#M2array = np.zeros(tmax)
 		
-		Earray = np.zeros(tmax)
-		E2array = np.zeros(tmax)
+		#Earray = np.zeros(tmax)
+		#E2array = np.zeros(tmax)
 		
 		#==================================================================
 		#Fordi noget med at bad initial conditions kan give local minim..
@@ -708,11 +751,54 @@ def MainScript(T,Ms,Es,XTs,Cvs,Ts,CEts,CMts):
 		#Harray[nt] = np.sum(results)
 		
 				#Calculate Eavg from equilibration samples
+				
+				#MAYBE HERE; I should get or USE the M2avg,E2avg etc??? to caculate more versions of XT,Cv... I need more versions of them
+		
+		Eavglist = []
+		E2avglist = []
+		Mavglist = []
+		M2avglist = []
 		for i in range(ntest):
 			Mavg += results[i][0]
 			M2avg += results[i][1]
 			E2avg += results[i][2]
 			Eavg += results[i][3]
+			
+			Eavglist.append(results[i][3])
+			E2avglist.append(results[i][2])
+			M2avglist.append(results[i][1])
+			Mavglist.append(results[i][0])
+			
+		print("PRINTING M2avg and E2avg and Eavg and Mavg")
+		print(len(Mavglist))
+		print(len(M2avglist))
+		print(len(Eavglist))
+		print(len(E2avglist))
+		
+		#Msingles = np.zeros(Nexperiment)
+		Msingles = results[ntest-1][4]
+		Esingles = results[ntest-1][5]
+
+		print(Msingles)
+		MsinglesVar = np.var(np.array(Msingles)/N)
+		MsinglesStd = np.std(np.array(Msingles)/N)
+		MsingleALL.append(MsinglesStd)
+		
+		EsinglesVar = np.var(np.array(Esingles)/N)
+		EsinglesStd = np.std(np.array(Esingles)/N)
+		EsingleALL.append(EsinglesStd)
+		
+		M2singleALL = []
+		E2singleALL = []
+		M2singles = results[ntest-1][6]
+		E2singles = results[ntest-1][7]
+		M2singlesVar = np.var(np.array(M2singles)/N)
+		M2singlesStd = np.std(np.array(M2singles)/N)
+		M2singleALL.append(M2singles)
+		
+		E2singlesVar = np.var(np.array(E2singles)/N)
+		E2singlesStd = np.std(np.array(E2singles)/N)
+		E2singleALL.append(E2singles)
 
 			
 		#================================================
@@ -727,7 +813,7 @@ def MainScript(T,Ms,Es,XTs,Cvs,Ts,CEts,CMts):
 		
 		
 		#Calculate Isothermal susceptibility
-		#Det er egentlig XT pr site... men det er pr site squared, virker ikke helt rigtigt
+		#chi = dm/dh, but we have no h.... but we can use the variance
 		XT = (1/T)*(M2-M**2)/N
 		
 		#Calculate specific heat
@@ -740,9 +826,24 @@ def MainScript(T,Ms,Es,XTs,Cvs,Ts,CEts,CMts):
 		#Det kan godt være, at i stedet for np.abs(), skal det være ( )**2
 		
 		
+		#WHat I want to append into XTsingleALL and CvsingleALL, is the standard deviation.... of those statistics...
+		#So, I need std of XT and std of Cv... and the append them in....
+		#Don't initialize them? BEcause they are argument input to MainScrip(...)
+		XTsarr = []
+		Cvsarr = []
+		for i in range(ntest):
+			XTsarr.append((1/T)*(M2avglist[i]-Mavglist[i]**2)/N)
+			Cvsarr.append((1/T**2)*(E2avglist[i]-Eavglist[i]**2)/N)
+			#0
+		#Ok... how do I get more XT and CVs calculations..???
+		#Maybe, further inside, maybe from MCparallelrun()...
+		
+		XTsingleALL.append(np.std(np.array(XTsarr)))
+		CvsingleALL.append(np.std(np.array(Cvsarr)))
 		#==============================
 		#Energy and magnetization pr spinsite
 		#After having used E,M for XT and Cv, now we can divide by N
+		#N = nx*ny
 		E = E/N
 		M = M/N
 			
@@ -773,10 +874,12 @@ def MainScript(T,Ms,Es,XTs,Cvs,Ts,CEts,CMts):
 def CalcAutocorrelation(T):
 	"""
 	Makes autocorrelation, different temperatures, different observables
+	#First an outer loop, for all the different temperatures.
+	#Then, an inner loop, that does the actual MC simulation, for a given temperature
 	"""
 	
 	#The main outer loop changes the temperature, so Nt is the number of different temperatures we examine
-	for nt in range(Nt):
+	for nt in range(N_T):
 
 		
 		#==================================================================
@@ -818,16 +921,22 @@ def CalcAutocorrelation(T):
 		np.random.seed()
 		
 		#==================================================================
-		#Here I make the initial spin state. If T < Tcritical, i make fully aligned state of ones, else i make a random state of {-1,1}
+		#Here I make the initial spin state S. If T < Tcritical, i make fully aligned state of ones, else i make a random state of {-1,1}
+		
 		
 		#randomS(S)
 		if T < 2.269:
+			#If T is less than critical T, let's start off in uniform(ferromagnetic) configuratiom
 			S = np.ones((ny,nx))
 
-	
 		else:
+		
+			#Start in random state
 			#If val of index = 0, then we go to -1, if val of index = 2, then we get 1.
-			S = 2*np.random.randint(0,2,(ny,nx))-1
+			#S = 2*np.random.randint(0,2,(ny,nx))-1
+			
+			#Start in magnetized state
+			S = np.ones((ny,nx))
 
 		#================================================
 		#Calculate beginning energy.
@@ -836,21 +945,30 @@ def CalcAutocorrelation(T):
 		
 		
 		#================================================
+		#MONTE CARLO LOOP
 		#This is the actual MonteCarlo loop, changing the configuration based on probabilities
 		#This should perhaps be a while loop instead... while Avgcount < 10
 		n = 0
-		
+		Etimeplot = np.zeros(Nequilibration+tmax)
 		#Skal det være fra tmax eller tmax-1?
 		while n <= Nequilibration+tmax-1:
 		#for n in range(150*N):
+		
+			#Pick random site index i,j to be flipped
 			randi,randj = np.random.randint(0,nx,2)
 			#randj = np.random.randint(0,ny)
 
-
+			
+			#Calculate change in energy from flipping
 			dE = Esiteflip(S,randj,randi,nx,ny)
-		
+			
+			#If energy is less than zero, we accept the flip.
 			if dE <= 0:
+			
+				#Flip the site
 				S[randj,randi] *= -1
+				
+				#Change energy. Since we accepted dE<0, this accept will lower total energy
 				EACF += dE
 			else:
 				x = np.random.uniform(0,1)
@@ -887,9 +1005,14 @@ def CalcAutocorrelation(T):
 			
 			#Method 2
 			
+			#Mtimeplot[n] = np.abs(np.sum(S))
+			Etimeplot[n] = EACF
 			
+			#If current step n is larger than Equilibration time, then collect the data
 			#Det skal være >= tror jeg, fordi vi vil også gerne have nindex == 0
 			if n >= Nequilibration:
+				
+				#The collect index is nindex
 				nindex = n-Nequilibration
 				Mauto = np.abs(np.sum(S))
 				Marray[nindex] = Mauto
@@ -900,7 +1023,8 @@ def CalcAutocorrelation(T):
 				E2array[nindex] = Eauto*Eauto
 
 			n += 1
-			
+		#Plot timestep,
+		plotTimeSeriesEandM(Etimeplot,Marray,T)	
 		#Lige nu printer den 15000
 		#print(n-Nequilibration)
 		#=====================================
@@ -967,7 +1091,7 @@ def CalcAutocorrelation(T):
 		
 		CEts2[:,nt] *= 1/Edenom
 		CMts2[:,nt] *= 1/Mdenom
-		print(Edenom,Mdenom)
+		#print(Edenom,Mdenom)
 		
 		#==========================================
 		#Method 3
@@ -988,8 +1112,12 @@ def CalcAutocorrelation(T):
 		
 	return
 	
-def CalculateTauCorr():
-	for i in range(Nt):
+def CalculateTauCorr(tauEarray,tauMarray,CEts2,CMts2):
+	
+	#Define Tau autocorrelation time, as the time it takes to go below 0
+	#This is, integrated autocorrelation time
+
+	for i in range(N_T):
 		#EUpToIndex = np.where(CEts2[:int(tmax*0.7),i] <= 0)[0]
 		#MUpToIndex = np.where(CMts2[:int(tmax*0.7),i] <= 0)[0]
 		try:
@@ -1004,12 +1132,26 @@ def CalculateTauCorr():
 			tauMarray[i] = int(0.5 + np.sum(CMts2[:MUpToIndex,i]))
 		except:
 			pass
+	return 
 
-
-def PlotValues():
+def PlotValues(Ts,Ms,Es,XTs,Cvs,MsingleALL,EsingleALL,XTsingleALL,CvsingleALL):
 	
+	
+	
+	
+	print("FROM PlotValues")
+	print("len Ts", len(Ts))
+	print("len Ms", len(Ms))
+	print("len MsingleALL", len(MsingleALL))
+	print(Ms)
+	print(MsingleALL)
 	fig2 = plt.figure(2)
-	plt.plot(Ts,Ms)
+	plt.plot(Ts,Ms,color="green",linewidth=2)
+	y1 = np.array(Ms)+1.96*np.array(MsingleALL)
+	y2 = np.array(Ms)-1.96*np.array(MsingleALL)
+	plt.plot(Ts,y1,color="green",alpha = 0.5)
+	plt.plot(Ts,y2,color="green",alpha = 0.5)
+	plt.fill_between(Ts, y1, y2,alpha=0.3,facecolor="green")
 	plt.xlabel("T")
 	plt.ylabel("m")
 	plt.title("Magnetization")
@@ -1017,7 +1159,12 @@ def PlotValues():
 	plt.show()
 
 	fig3 = plt.figure(3)
-	plt.plot(Ts,Es)
+	plt.plot(Ts,Es,color="green",linewidth=2)
+	y1 = np.array(Es)+1.96*np.array(EsingleALL)
+	y2 = np.array(Es)-1.96*np.array(EsingleALL)
+	plt.plot(Ts,y1,color="green",alpha = 0.5)
+	plt.plot(Ts,y2,color="green",alpha = 0.5)
+	plt.fill_between(Ts, y1, y2,alpha=0.3,facecolor="green")
 	plt.xlabel("T")
 	plt.ylabel("E")
 	plt.title("Energy pr spin site")
@@ -1025,7 +1172,12 @@ def PlotValues():
 	plt.show()
 
 	fig4 = plt.figure(4)
-	plt.plot(Ts,XTs)
+	plt.plot(Ts,XTs,color="green",linewidth=2)
+	y1 = np.array(XTs)+1.96*np.array(XTsingleALL)
+	y2 = np.array(XTs)-1.96*np.array(XTsingleALL)
+	plt.plot(Ts,y1,color="green",alpha = 0.5)
+	plt.plot(Ts,y2,color="green",alpha = 0.5)
+	plt.fill_between(Ts, y1, y2,alpha=0.3,facecolor="green")
 	plt.xlabel("T")
 	plt.ylabel("XT")
 	plt.title("Isothermal Susceptibility")
@@ -1034,14 +1186,19 @@ def PlotValues():
 
 
 	fig5 = plt.figure(5)
-	plt.plot(Ts,Cvs)
+	plt.plot(Ts,Cvs,color="green",linewidth=2)
+	y1 = np.array(Cvs)+1.96*np.array(CvsingleALL)
+	y2 = np.array(Cvs)-1.96*np.array(CvsingleALL)
+	plt.plot(Ts,y1,color="green",alpha = 0.5)
+	plt.plot(Ts,y2,color="green",alpha = 0.5)
+	plt.fill_between(Ts, y1, y2,alpha=0.3,facecolor="green")
 	plt.xlabel("T")
 	plt.ylabel("Cv")
 	plt.title("Specific heat")
 	fig5.savefig('figs/Specificheat.png', bbox_inches='tight')
 	plt.show()
 
-def PlotACFTemp(tauE,tauM):
+def PlotACFTemp(Ts,tauE,tauM):
 	fig7 = plt.figure(6)
 
 
@@ -1060,7 +1217,7 @@ def PlotACFTemp(tauE,tauM):
 	plt.show()
 	
 	
-def PlotACFTime():
+def PlotACFTime(tmax,CEts2,CMts2):
 	fig6 = plt.figure(6)
 	tshere = [j for j in range(tmax)]
 	#Either use tmax/3 or tmax*0.7
@@ -1081,7 +1238,7 @@ def PlotACFTime():
 	#plt.show()
 
 	#plt.clf()	
-	for i in range(Nt):
+	for i in range(N_T):
 		plt.clf()
 		fig6 = plt.figure(6)
 		
@@ -1090,8 +1247,9 @@ def PlotACFTime():
 		plt.plot(tshere[:end],CMts2[:end,i], color="red",linestyle="-.")
 		plt.plot(tshere[:end],CEts2[:end,i], color="black",linestyle="-.")
 		
-
+		
 		plt.axis([0,end,-1.1,1.1])
+		plt.grid()
 		plt.legend(["M","E"])
 		#plt.legend(["M2","E2","M4","E4"])
 		#plt.legend(["M2","E2","M3","E3","M4","E4"])
@@ -1101,7 +1259,31 @@ def PlotACFTime():
 		
 		fig6.savefig('figs/Autocorrelation{}.png'.format(i), bbox_inches='tight')
 		
-		
+
+def plotTimeSeriesEandM(Earray,Marray,T):
+	plt.clf()
+	fig6 = plt.figure(6)
+	
+	#Either use tmax/3 or tmax*0.7
+	
+	#At the moment, this is without equilibrium period...
+	plt.plot(Earray, color="black",linestyle="-.")
+	#plt.plot(Marray, color="red",linestyle="-.")
+	
+
+	#plt.axis([0,end,-1.1,1.1])
+	plt.grid()
+	#plt.legend(["E","M"])
+	#plt.legend(["M2","E2","M4","E4"])
+	#plt.legend(["M2","E2","M3","E3","M4","E4"])
+	plt.title("Ising model E and M time series, T = {:0.2f}".format(T))
+	plt.xlabel("n timestep")
+	plt.ylabel("Total Value")
+	
+	fig6.savefig('figs/TimeSeriesEandM{}.png'.format(T), bbox_inches='tight')
+
+
+	return 
 
 def animate(i): #i increment with 1 each step
 
@@ -1166,64 +1348,89 @@ if __name__ == "__main__":
 	#y = np.linspace(0,10,ny)
 	T = 0.9
 	dT = 0.1
-	Nt = 40
+	N_T = 40
 	J = 1# J > 0 gives ferromagnetism
+	
 	ntest = 10 #Amount of Monte Carlo runs we do for EACH temperature. To weed out local minimum effects
+	#Should maybe not be necessary, due to ergodicity
 	
 	tmax = 15000
 	
 
 	Nequilibration = 5*N
-	#======================================================
-	#Make Autocorrelations
-	#Should perhaps fit to data also, maybe? so i get the actual time thing.
+	#==============================================
+	#Test exponentials
+	#print("Testing exponentials")
+	#PreCalcExp = np.exp([-(2*i-8.0)/1 for i in range(9)])
+	#dE = 8,6,4,2
 	
-	#For autocorrelation, we don't take 10 tests i think, at least in the most simple case
-	#so, ntest = 1 we put it.
-	#Nt = 20
-	#kt = 6
-	#tmax = int(kt*1000)
-	TauEarrayBig = np.zeros((Nt,ntest))
-	TauMarrayBig = np.zeros((Nt,ntest))
-	Ts = np.linspace(T,T+(Nt-1)*dT,Nt,endpoint=True)
-	for navg in range(ntest):
-		print(navg)
-		#Autocorrelation
-		CEts2 = np.zeros((tmax,Nt))
-		CMts2 = np.zeros((tmax,Nt))
-		T = 0.9
-		#T = 1
-		#dT = 0.15
-		CalcAutocorrelation(T)
-		#print(CEts)
+	#print(PreCalcExp[int((8+8)/2)], 0.0003354)
+	#print(PreCalcExp[int((6+8)/2)], 0.002478)
+	#print(PreCalcExp[int((4+8)/2)], 0.01831)
+	#print(PreCalcExp[int((2+8)/2)], 0.13533)
+	
+	#Der bør faktisk kun være for dE = 2,4,6,8? Og faktisk måske kun for dE = 2,8, right?
+	#Eller dE = 4,8?
+	
+	# #======================================================
+	# #Make Autocorrelations
+	# #Should perhaps fit to data also, maybe? so i get the actual time thing.
+	
+	# #For autocorrelation, we don't take 10 tests i think, at least in the most simple case
+	# #so, ntest = 1 we put it.
+	# #Nt = 20
+	# #kt = 6
+	# #tmax = int(kt*1000)
+	# print("Make autocorrelations")
+	# TauEarrayBig = np.zeros((Nt,ntest))
+	# TauMarrayBig = np.zeros((Nt,ntest))
+	# Ts = np.linspace(T,T+(Nt-1)*dT,Nt,endpoint=True)
+	# for navg in range(ntest):
+		# print(navg)
 		
-		#======================================================
-		#Calculate integrated autocorrelation time
-		tauEarray = np.zeros(Nt)
-		tauMarray = np.zeros(Nt)
+		# #Autocorrelation
+		# CEts2 = np.zeros((tmax,Nt))
+		# CMts2 = np.zeros((tmax,Nt))
+		# T = 0.9
+		# #T = 1
+		# #dT = 0.15
+		# #CalcAutocorrelation() will do tho temperature stepping, going through all temperatures, inside
+		# CalcAutocorrelation(T)
+		# #print(CEts)
+		
 
-		CalculateTauCorr()
 		
-		TauEarrayBig[:,navg] = tauEarray
-		TauMarrayBig[:,navg] = tauMarray
+		# #======================================================
+		# #Calculate integrated autocorrelation time
+		# tauEarray = np.zeros(Nt)
+		# tauMarray = np.zeros(Nt)
+
+		# CalculateTauCorr(tauEarray,tauMarray,CEts2,CMts2)
+		
+		# TauEarrayBig[:,navg] = tauEarray
+		# TauMarrayBig[:,navg] = tauMarray
 	
-	TauEavg = np.zeros(Nt)
-	TauMavg = np.zeros(Nt)
-	for navg in range(ntest):
-		TauEavg += TauEarrayBig[:,navg]
-		TauMavg += TauMarrayBig[:,navg]
-	TauEavg *= 1/ntest
-	TauMavg *= 1/ntest
-	#tauint1 = int(0.5 + np.sum(CEts2[:int(tmax*0.7),Nt-1]))
-	#tauint2 = int(0.5 + np.sum(CMts2[:int(tmax*0.7),Nt-1]))
-	#tauint = max(tauint1,tauint2)
-	#print(tauint)
+	# TauEavg = np.zeros(Nt)
+	# TauMavg = np.zeros(Nt)
+	# for navg in range(ntest):
+		# TauEavg += TauEarrayBig[:,navg]
+		# TauMavg += TauMarrayBig[:,navg]
+		
+	# #Divide by ntest, because we do #ntest simulations at each temperature T	
+	# TauEavg *= 1/ntest
+	# TauMavg *= 1/ntest
+	# #tauint1 = int(0.5 + np.sum(CEts2[:int(tmax*0.7),Nt-1]))
+	# #tauint2 = int(0.5 + np.sum(CMts2[:int(tmax*0.7),Nt-1]))
+	# #tauint = max(tauint1,tauint2)
+	# #print(tauint)
 	
-	#====================================================
-	#Plot autocorrelation and time
-	T = 0.9
-	PlotACFTemp(TauEavg,TauMavg)
-	PlotACFTime()
+	# #====================================================
+	# #Plot autocorrelation and time
+	# T = 0.9
+	# PlotACFTemp(Ts,TauEavg,TauMavg)
+	
+	# #This will only be for the last ntest iterate, since CEts2, CMts2 get reinitialized at each step
+	# PlotACFTime(tmax,CEts2,CMts2)
 	
 	
 	#=====================================================
@@ -1232,21 +1439,22 @@ if __name__ == "__main__":
 	#Make (T,M) graph etc. For each temperature T, we add the final averaged out M,E,XT,Cv
 	T = 0.9
 	dT = 0.1
-	Nt = 40
+	N_T = 40
 	J = 1# J > 0 gives ferromagnetism
-	ntest = 16 #Amount of Monte Carlo runs we do for EACH temperature. To weed out local minimum effects
+	ntest = 6 #16 #Amount of Monte Carlo runs we do for EACH temperature. To weed out local minimum effects
 	
 	tmax = 20000
 	
-	
+	CEts2 = np.zeros((tmax,N_T))
+	CMts2 = np.zeros((tmax,N_T))
 	Ms = []
 	Es = []
 	XTs = []
 	Cvs = []
-	Ts = np.linspace(T,T+Nt*dT,Nt)
+	Ts = np.linspace(T,T+N_T*dT,N_T)
 	
 	
-	
+	tauint = 0
 	if tauint > N:
 		Nexperiment = tauint
 	else:
@@ -1255,20 +1463,27 @@ if __name__ == "__main__":
 	#1 for save, 0 for no savefig
 	SaveFig = 0
 	
-	#MainScript(T,Ms,Es,XTs,Cvs,Ts,CEts2,CMts2)
+	MsingleALL = []
+	EsingleALL = []
+	XTsingleALL = []
+	CvsingleALL = []
+	MainScript(T,Ms,Es,XTs,Cvs,Ts,CEts2,CMts2,MsingleALL,EsingleALL,XTsingleALL,CvsingleALL)
+	
+	print("FINAL PRINT OF MSINGLEALL")
+	print(MsingleALL)
 	
 
 	
 	#=====================================================
 	#Make plots
-	#PlotValues()
+	PlotValues(Ts,Ms,Es,XTs,Cvs,MsingleALL,EsingleALL,XTsingleALL,CvsingleALL)
 
 	#print(Ms)
 	#print(Ts)
 	#Lige nu der går den til M = +-625... 
 	
 	
-
+	
 	
 	#===============================================================
 	#Animation
